@@ -11,7 +11,7 @@ utw is a simple terminal script inspired by popular NodeJS testing frameworks to
 
 utm runs the [below command](#command), parses the `UE_LOG` output, and prints an output to the terminal with the status of each of the tests.
 
-<center><img src="resources/screenshot.png" alt="utw screenshot" width="400px" /></center>
+<div style="text-align: center"><img src="resources/screenshot.png" alt="utw screenshot" width="400px" /></div>
 
 There is preliminary, untested support for Mac, but Linux is not supported currently (PRs are welcome!).
 
