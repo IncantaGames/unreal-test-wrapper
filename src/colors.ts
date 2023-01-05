@@ -22,6 +22,9 @@ export enum Colors {
   DiffRemovedInline = "30;41",
 }
 
-export function ColoredText(type: Colors, str: string) {
+export function ColoredText(type: Colors, str: string, noColor: boolean) {
+  if (noColor) {
+    return str;
+  }
   return "\u001b[" + type + "m" + str + "\u001b[0m";
 }

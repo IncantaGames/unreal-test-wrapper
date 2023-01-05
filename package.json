@@ -5,6 +5,9 @@
   "repository": "git@github.com:IncantaGames/unreal-test-wrapper.git",
   "author": "Incanta Games",
   "license": "MIT",
+  "bin": {
+    "utw": "lib/index.js"
+  },
   "scripts": {
     "build": "tsc -b .",
     "start": "node lib/index.js"

@@ -4,6 +4,7 @@ import { Colors, ColoredText } from "./colors";
 export function timeText(
   timeStart: number,
   timeStop: number,
+  noColor: boolean,
   ignoreSpeed: boolean = false
 ) {
   const diff = timeStop - timeStart;
@@ -18,7 +19,7 @@ export function timeText(
     }
   }
 
-  return ColoredText(speed, `(${Math.trunc(diff)}ms)`);
+  return ColoredText(speed, `(${Math.trunc(diff)}ms)`, noColor);
 }
 
 export function lineTimestamp(line: string) {

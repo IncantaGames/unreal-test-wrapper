@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -37,22 +39,24 @@ enum UnrealBuildConfiguration {
     .version(packageJson.version)
     .argument("<test-pattern>", "The test pattern to use for Unreal Automation")
     .option(
-      "-b --build-configuration",
+      "-b --build-configuration <build-configuration>",
       `The build configuration to use (${Object.values(
         UnrealBuildConfiguration
       ).join(", ")}; default: ${UnrealBuildConfiguration.Development})`,
       UnrealBuildConfiguration.Development
     )
     .option(
-      "--engine-dir",
+      "--engine-dir <engine-dir>",
       "Path to the base of the Unreal Engine installation to use."
-    );
+    )
+    .option("--no-color", "Disable colorized output");
 
   await program.parseAsync();
 
   const testPattern = program.args[0];
 
   const opts = program.opts();
+  const noColor = opts.noColor;
 
   console.log();
 
@@ -145,20 +149,20 @@ enum UnrealBuildConfiguration {
     }
   }
 
-  let binaryFolder;
+  let binaryLabel;
   let binaryExtension = "";
   switch (os.type()) {
     case "Windows_NT": {
-      binaryFolder = "Win64";
+      binaryLabel = "Win64";
       binaryExtension = ".exe";
       break;
     }
     case "Darwin": {
-      binaryFolder = "Mac";
+      binaryLabel = "Mac";
       break;
     }
     case "Linux": {
-      binaryFolder = "Linux";
+      binaryLabel = "Linux";
       break;
     }
     default: {
@@ -166,12 +170,18 @@ enum UnrealBuildConfiguration {
     }
   }
 
+  const buildConfig: UnrealBuildConfiguration = opts.buildConfiguration;
+
+  const suffix =
+    buildConfig === UnrealBuildConfiguration.Development
+      ? `${binaryExtension}`
+      : `-${binaryLabel}-${opts.buildConfiguration}${binaryExtension}`;
   const ue4Editor = path.join(
     engineDir,
     "Engine",
     "Binaries",
-    binaryFolder,
-    `UE4Editor${binaryExtension}`
+    binaryLabel,
+    `UE4Editor${suffix}`
   );
   if (fs.existsSync(ue4Editor)) {
     unrealExe = ue4Editor;
@@ -180,14 +190,14 @@ enum UnrealBuildConfiguration {
       engineDir,
       "Engine",
       "Binaries",
-      binaryFolder,
-      `UnrealEditor${binaryExtension}`
+      binaryLabel,
+      `UnrealEditor${suffix}`
     );
     if (fs.existsSync(ue5Editor)) {
       unrealExe = ue5Editor;
     } else {
       throw new Error(
-        `Could not find UE4Editor${binaryExtension} or UnrealEditor${binaryExtension} for engine version located at ${engineDir}`
+        `Could not find UE4Editor${suffix} or UnrealEditor${suffix} for engine version located at ${engineDir}`
       );
     }
   }
@@ -320,8 +330,9 @@ enum UnrealBuildConfiguration {
             prefixText: indent(),
             text: `${ColoredText(
               testSuccessful ? Colors.Pass : Colors.Fail,
-              testName
-            )} ${timeText(timeStart, lineTime)}`,
+              testName,
+              noColor
+            )} ${timeText(timeStart, lineTime, noColor)}`,
           });
 
           continue;
@@ -334,7 +345,8 @@ enum UnrealBuildConfiguration {
           console.log(
             ColoredText(
               Colors.Light,
-              `  Tests finished ${timeText(timeStartTotal, lineTime, true)}`
+              `  Tests finished ${timeText(timeStartTotal, lineTime, true)}`,
+              noColor
             )
           );
         }
@@ -390,12 +402,20 @@ enum UnrealBuildConfiguration {
     console.log();
 
     if (passingTests > 0) {
-      const passingText = ColoredText(Colors.Green, `${passingTests} passing`);
+      const passingText = ColoredText(
+        Colors.Green,
+        `${passingTests} passing`,
+        noColor
+      );
       console.log(`  ${passingText}`);
     }
 
     if (failingTests > 0) {
-      const failingText = ColoredText(Colors.Fail, `${failingTests} failing`);
+      const failingText = ColoredText(
+        Colors.Fail,
+        `${failingTests} failing`,
+        noColor
+      );
       console.log(`  ${failingText}`);
     }
 
