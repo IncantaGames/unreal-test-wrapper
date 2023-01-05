@@ -354,6 +354,22 @@ enum UnrealBuildConfiguration {
 
       {
         const regex = new RegExp(
+          "LogAutomationCommandLine: Error: No automation tests matched"
+        );
+        const match = regex.exec(line);
+        if (match !== null) {
+          timeStartTotal = lineTime;
+          const timeStop = performance.now();
+          spinner.stopAndPersist({
+            text: `Unreal Initialized ${timeText(timeStart, timeStop, true)}`,
+            symbol: "",
+            prefixText: "",
+          });
+        }
+      }
+
+      {
+        const regex = new RegExp(
           `LogAutomationCommandLine: Display: Found ([0-9]+) automation tests based on`
         );
         const match = regex.exec(line);
@@ -417,6 +433,15 @@ enum UnrealBuildConfiguration {
         noColor
       );
       console.log(`  ${failingText}`);
+    }
+
+    if (passingTests === 0 && failingTests === 0) {
+      const text = ColoredText(
+        Colors.BrightYellow,
+        `No tests matched the pattern "${testPattern}"`,
+        noColor
+      );
+      console.log(`  ${text}`);
     }
 
     console.log();
