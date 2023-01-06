@@ -243,6 +243,7 @@ enum UnrealBuildConfiguration {
 
   function processPath(testPath: string[]) {
     if (currentTestPath.length === 0) {
+      console.log();
       for (let j = 0; j < testPath.length; j++) {
         console.log("  ".repeat(j + 1) + testPath[j]);
       }
@@ -258,6 +259,10 @@ enum UnrealBuildConfiguration {
       const newPathPart = testPath[i];
 
       if (oldPathPart !== newPathPart) {
+        if (i === 0) {
+          console.log();
+        }
+
         // here's the difference, be sure to print out the rest
         for (let j = i; j < testPath.length; j++) {
           console.log("  ".repeat(j + 1) + testPath[j]);
@@ -340,6 +345,36 @@ enum UnrealBuildConfiguration {
       }
 
       {
+        const s = "Error: appError called: ";
+        const regex = new RegExp(s);
+        const match = regex.exec(line);
+        if (match !== null) {
+          if (spinner.isSpinning) {
+            failingTests++;
+            spinner.stopAndPersist({
+              symbol: symbols.error,
+              prefixText: indent(),
+              text: `${ColoredText(
+                Colors.Fail,
+                `${spinner.text} (Unreal exited before test finished)`,
+                noColor
+              )}`,
+            });
+
+            console.log();
+          }
+
+          console.log(
+            ColoredText(
+              Colors.Fail,
+              `  Unreal App Error: ${line.substring(match.index + s.length)}`,
+              noColor
+            )
+          );
+        }
+      }
+
+      {
         if (line.includes("TEST COMPLETE")) {
           console.log();
           console.log(
@@ -416,6 +451,21 @@ enum UnrealBuildConfiguration {
 
   p.on("close", (code: number) => {
     console.log();
+
+    if (spinner.isSpinning) {
+      failingTests++;
+      spinner.stopAndPersist({
+        symbol: symbols.error,
+        prefixText: indent(),
+        text: `${ColoredText(
+          Colors.Fail,
+          `${spinner.text} (Unreal exited before test finished)`,
+          noColor
+        )}`,
+      });
+
+      console.log();
+    }
 
     if (passingTests > 0) {
       const passingText = ColoredText(
