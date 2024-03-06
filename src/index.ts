@@ -31,10 +31,22 @@ enum UnrealBuildConfiguration {
   );
   const program = new Command();
 
+  let utwJson: any = null;
+  if (fs.existsSync(path.join(process.cwd(), "utw.json"))) {
+    utwJson = JSON.parse(
+      await fs.promises.readFile(path.join(process.cwd(), "utw.json"), {
+        encoding: "utf-8",
+      })
+    );
+  }
+
+  let buildConfigurationSpecified = false;
+  let projectDirSpecified = false;
+  let engineDirSpecified = false;
   program
     .name("utw")
     .description(
-      "Unreal Test Wrapper is a script that bootstraps and beautifies Unreal tests. Call from the directory"
+      "Unreal Test Wrapper is a script that bootstraps and beautifies Unreal tests. Call from the directory of your uproject file."
     )
     .version(packageJson.version)
     .argument("<test-pattern>", "The test pattern to use for Unreal Automation")
@@ -43,11 +55,29 @@ enum UnrealBuildConfiguration {
       `The build configuration to use (${Object.values(
         UnrealBuildConfiguration
       ).join(", ")}; default: ${UnrealBuildConfiguration.Development})`,
+      (value: string, previous: string) => {
+        buildConfigurationSpecified = true;
+        return value;
+      },
       UnrealBuildConfiguration.Development
     )
     .option(
+      "-p --project-dir <project-dir>",
+      "Path to the base of the Unreal Project to use; default: process.cwd()",
+      (value: string, previous: string) => {
+        projectDirSpecified = true;
+
+        return path.resolve(process.cwd(), value);
+      },
+      process.cwd()
+    )
+    .option(
       "--engine-dir <engine-dir>",
-      "Path to the base of the Unreal Engine installation to use."
+      "Path to the base of the Unreal Engine installation to use.",
+      (value: string, previous: string) => {
+        engineDirSpecified = true;
+        return value;
+      }
     )
     .option("--no-color", "Disable colorized output");
 
@@ -56,6 +86,19 @@ enum UnrealBuildConfiguration {
   const testPattern = program.args[0];
 
   const opts = program.opts();
+
+  if (!buildConfigurationSpecified && utwJson?.buildConfiguration) {
+    opts.buildConfiguration = utwJson.buildConfiguration;
+  }
+
+  if (!projectDirSpecified && utwJson?.projectDir) {
+    opts.projectDir = path.resolve(process.cwd(), utwJson.projectDir);
+  }
+
+  if (!engineDirSpecified && utwJson?.engineDir) {
+    opts.engineDir = utwJson.engineDir;
+  }
+
   const noColor = opts.noColor;
 
   console.log();
@@ -63,8 +106,10 @@ enum UnrealBuildConfiguration {
   let engineDir: string;
   let unrealExe: string;
 
-  const dirContents = await fs.promises.readdir(process.cwd());
+  const dirContents = await fs.promises.readdir(opts.projectDir);
   const uprojectFiles = dirContents.filter((f) => f.endsWith(".uproject"));
+
+  const pathTokens = opts.projectDir.split(path.sep);
 
   assert.equal(
     uprojectFiles.length,
@@ -72,7 +117,7 @@ enum UnrealBuildConfiguration {
     "Run in a directory that only has one .uproject file"
   );
 
-  const uprojectFilePath = path.join(process.cwd(), uprojectFiles[0]);
+  const uprojectFilePath = path.join(opts.projectDir, uprojectFiles[0]);
 
   if (opts.engineDir) {
     assert(
@@ -86,65 +131,74 @@ enum UnrealBuildConfiguration {
     });
     const uproject = JSON.parse(uprojectStr);
 
-    assert(
-      typeof uproject.EngineAssociation === "string" &&
-        uproject.EngineAssociation !== "",
-      `${uprojectFiles[0]} doesn't have a valid EngineAssociation value`
-    );
+    if (!uproject.EngineAssociation) {
+      // see if we're in an engine directory
+      if (!pathTokens.includes("Engine") && !pathTokens.includes("Templates")) {
+        throw new Error(
+          "Need to specify EngineAssociation in the uproject file or run in an engine directory"
+        );
+      }
 
-    switch (os.type()) {
-      case "Windows_NT": {
-        const key = new Registry({
-          hive: Registry.HKCU,
-          key: "\\Software\\Epic Games\\Unreal Engine\\Builds",
-        });
-        engineDir = await new Promise<string>((resolve, reject) => {
-          key.get(uproject.EngineAssociation, (error, result) => {
-            if (error) {
-              reject(
+      const engineIndex =
+        pathTokens.indexOf("Engine") === -1
+          ? pathTokens.indexOf("Templates")
+          : pathTokens.indexOf("Engine");
+      engineDir = path.join(...pathTokens.slice(0, engineIndex + 1), "..");
+    } else {
+      switch (os.type()) {
+        case "Windows_NT": {
+          const key = new Registry({
+            hive: Registry.HKCU,
+            key: "\\Software\\Epic Games\\Unreal Engine\\Builds",
+          });
+          engineDir = await new Promise<string>((resolve, reject) => {
+            key.get(uproject.EngineAssociation, (error, result) => {
+              if (error) {
+                reject(
+                  `Could not find the installed engine version ${uproject.EngineAssociation}`
+                );
+              } else {
+                resolve(result.value);
+              }
+            });
+          });
+          break;
+        }
+        case "Darwin": {
+          if (process.env.HOME) {
+            const configFilePath = path.join(
+              process.env.HOME,
+              "Library",
+              "Application Support",
+              "Epic",
+              "UnrealEngine",
+              "Install.ini"
+            );
+            const configFile = await fs.promises.readFile(configFilePath, {
+              encoding: "utf-8",
+            });
+            const config = ini.parse(configFile);
+            if (
+              config.Installations &&
+              config.Installations[uproject.EngineAssociation]
+            ) {
+              engineDir = config.Installations[uproject.EngineAssociation];
+            } else {
+              throw new Error(
                 `Could not find the installed engine version ${uproject.EngineAssociation}`
               );
-            } else {
-              resolve(result.value);
             }
-          });
-        });
-        break;
-      }
-      case "Darwin": {
-        if (process.env.HOME) {
-          const configFilePath = path.join(
-            process.env.HOME,
-            "Library",
-            "Application Support",
-            "Epic",
-            "UnrealEngine",
-            "Install.ini"
-          );
-          const configFile = await fs.promises.readFile(configFilePath, {
-            encoding: "utf-8",
-          });
-          const config = ini.parse(configFile);
-          if (
-            config.Installations &&
-            config.Installations[uproject.EngineAssociation]
-          ) {
-            engineDir = config.Installations[uproject.EngineAssociation];
           } else {
             throw new Error(
               `Could not find the installed engine version ${uproject.EngineAssociation}`
             );
           }
-        } else {
-          throw new Error(
-            `Could not find the installed engine version ${uproject.EngineAssociation}`
-          );
+          break;
         }
-        break;
-      }
-      case "Linux":
-      default: {
-        throw new Error("Linux isn't supported yet");
+        case "Linux":
+        default: {
+          throw new Error("Linux isn't supported yet");
+        }
       }
     }
   }
@@ -237,6 +291,8 @@ enum UnrealBuildConfiguration {
   let passingTests: number = 0;
   let failingTests: number = 0;
 
+  const errors: string[] = [];
+
   function indent() {
     return "  ".repeat(1 + currentTestPath.length);
   }
@@ -287,6 +343,22 @@ enum UnrealBuildConfiguration {
         if (match !== null) {
           const testName = match[1];
           numTests--;
+          continue;
+        }
+      }
+
+      {
+        const regex = new RegExp(
+          "The game module '(.*)' could not be found. Please ensure that this module exists and that it is compiled."
+        );
+        const match = regex.exec(line);
+        if (match !== null) {
+          const missingModule = match[1];
+
+          errors.push(
+            `Missing game module: ${missingModule}; did you compile the right target for this configuration?`
+          );
+
           continue;
         }
       }
@@ -463,6 +535,12 @@ enum UnrealBuildConfiguration {
           noColor
         )}`,
       });
+
+      console.log();
+
+      for (const error of errors) {
+        console.log(ColoredText(Colors.Fail, `  ${error}`, noColor));
+      }
 
       console.log();
     }
