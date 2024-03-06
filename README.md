@@ -5,7 +5,7 @@ utw is a simple terminal script inspired by popular NodeJS testing frameworks to
 ## Install
 
 1. Install [NodeJS](https://nodejs.org)
-1. `npm install --global utm`
+1. `npm install --global utw`
 
 ## About
 
